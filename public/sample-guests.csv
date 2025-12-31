@@ -1,0 +1,11 @@
+last_name,first_name,group,phone,notes,ticket_code
+Rossi,Mario,VIP,3331234567,Plus one,TKT001
+Bianchi,Lucia,Staff,,Event coordinator,TKT002
+Verdi,Giuseppe,General,3339876543,,TKT003
+Ferrari,Anna,VIP,3341112222,Table 5,TKT004
+Romano,Marco,General,,,TKT005
+Colombo,Francesca,Staff,3356667777,Sound tech,TKT006
+Ricci,Alessandro,VIP,3367778888,Sponsor guest,TKT007
+Marino,Sofia,General,3378889999,,TKT008
+Greco,Luca,General,,,TKT009
+Bruno,Giulia,VIP,3390001111,Plus two,TKT010
