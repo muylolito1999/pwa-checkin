@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useGuests, useGuestGroups } from "@/hooks/use-guests";
 import { useSession } from "@/hooks/use-session";
 import { GuestTable } from "@/components/guests/guest-table";
@@ -28,13 +28,6 @@ export default function GuestsPage() {
   });
 
   const groups = useGuestGroups(eventId);
-
-  const { totalCount, checkedInCount } = useMemo(() => {
-    return {
-      totalCount: guests.length,
-      checkedInCount: guests.filter((g) => g.isCheckedIn).length,
-    };
-  }, [guests]);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -71,8 +64,6 @@ export default function GuestsPage() {
         onGroupFilterChange={handleGroupFilterChange}
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
-        totalCount={totalCount}
-        checkedInCount={checkedInCount}
       />
 
       <GuestTable guests={guests} eventId={eventId} />
