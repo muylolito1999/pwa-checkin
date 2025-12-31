@@ -5,6 +5,7 @@ import { useGuests, useGuestGroups } from "@/hooks/use-guests";
 import { useSession } from "@/hooks/use-session";
 import { GuestTable } from "@/components/guests/guest-table";
 import { GuestFilters } from "@/components/guests/guest-filters";
+import { AddGuestDialog } from "@/components/guests/add-guest-dialog";
 import { useDebounce } from "@/hooks/use-debounce";
 
 export default function GuestsPage() {
@@ -52,11 +53,14 @@ export default function GuestsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Guest List</h1>
-        <p className="text-muted-foreground">
-          Manage check-ins for {session?.eventName}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Guest List</h1>
+          <p className="text-muted-foreground">
+            Manage check-ins for {session?.eventName}
+          </p>
+        </div>
+        <AddGuestDialog eventId={eventId} />
       </div>
 
       <GuestFilters

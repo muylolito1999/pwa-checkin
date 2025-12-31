@@ -166,16 +166,77 @@ export async function updateGuest(
   }
 }
 
-export async function deleteGuest(id: string): Promise<void> {
-  const now = new Date().toISOString();
+export async function deleteGuest(id: string, eventId: string): Promise<void> {
+  // Delete associated checkins first
+  const checkins = await db.checkins.where("guest_id").equals(id).toArray();
+  for (const checkin of checkins) {
+    await db.checkins.delete(checkin.id);
+    await addToOutbox("DELETE", "checkins", { id: checkin.id, event_id: eventId });
+  }
 
-  await db.guests.update(id, {
-    is_deleted: true,
+  // Get guest data before deleting for sync
+  const guest = await db.guests.get(id);
+
+  // Permanently delete from local DB
+  await db.guests.delete(id);
+
+  // Queue deletion for server sync
+  if (guest) {
+    await addToOutbox("DELETE", "guests", { id, event_id: eventId });
+  }
+}
+
+// Add guest manually with just first and last name
+export async function addGuestManual(
+  eventId: string,
+  firstName: string,
+  lastName: string
+): Promise<string> {
+  const now = new Date().toISOString();
+  // Generate unique stable key with timestamp to allow duplicates
+  const stableKey = generateStableKey(lastName, firstName) + "_" + Date.now();
+
+  const newGuest: LocalGuest = {
+    id: generateId(),
+    event_id: eventId,
+    first_name: firstName.trim(),
+    last_name: lastName.trim(),
+    notes: null,
+    phone: null,
+    group: null,
+    ticket_code: null,
+    stable_key: stableKey,
+    is_deleted: false,
+    created_at: now,
     updated_at: now,
     _pending_sync: true,
-  });
+  };
 
-  await addToOutbox("DELETE", "guests", { id });
+  await db.guests.add(newGuest);
+  await addToOutbox("CREATE", "guests", newGuest as unknown as Record<string, unknown>);
+
+  return newGuest.id;
+}
+
+// Check if a guest with same name already exists
+export async function checkDuplicateGuest(
+  eventId: string,
+  firstName: string,
+  lastName: string
+): Promise<string | null> {
+  const allGuests = await db.guests.toArray();
+  const duplicates = allGuests.filter(
+    (g) =>
+      g.event_id === eventId &&
+      !g.is_deleted &&
+      g.first_name.toLowerCase() === firstName.toLowerCase().trim() &&
+      g.last_name.toLowerCase() === lastName.toLowerCase().trim()
+  );
+
+  if (duplicates.length > 0) {
+    return `A guest named "${firstName} ${lastName}" already exists (${duplicates.length} found)`;
+  }
+  return null;
 }
 
 async function addToOutbox(

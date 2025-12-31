@@ -9,7 +9,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Clock } from "lucide-react";
+import { ArrowUpDown, Clock, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -18,9 +18,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckInButton } from "./check-in-button";
+import { deleteGuest } from "@/hooks/use-guests";
+import { toast } from "sonner";
 import type { LocalGuest } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +55,63 @@ function formatTime(isoString: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function DeleteGuestButton({
+  guest,
+  eventId,
+}: {
+  guest: GuestWithStatus;
+  eventId: string;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      await deleteGuest(guest.id, eventId);
+      toast.success(`Removed ${guest.first_name} ${guest.last_name}`);
+    } catch (error) {
+      toast.error("Failed to remove guest");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Guest</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to remove{" "}
+            <strong>{guest.first_name} {guest.last_name}</strong> from the guest list?
+            {guest.entryCount > 0 && (
+              <span className="block mt-2 text-orange-500">
+                This guest has {guest.entryCount} check-in record(s) that will also be deleted.
+              </span>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            disabled={loading}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {loading ? "Removing..." : "Remove"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 export function GuestTable({ guests, eventId }: GuestTableProps) {
@@ -116,12 +186,15 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <CheckInButton
-            guestId={row.original.id}
-            eventId={eventId}
-            guestName={`${row.original.first_name} ${row.original.last_name}`}
-            isCheckedIn={row.original.isCheckedIn}
-          />
+          <div className="flex items-center gap-2">
+            <CheckInButton
+              guestId={row.original.id}
+              eventId={eventId}
+              guestName={`${row.original.first_name} ${row.original.last_name}`}
+              isCheckedIn={row.original.isCheckedIn}
+            />
+            <DeleteGuestButton guest={row.original} eventId={eventId} />
+          </div>
         ),
       },
     ],
@@ -142,7 +215,7 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <p className="text-muted-foreground">No guests found</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Import guests from a CSV file to get started
+          Add guests manually or import from a CSV file
         </p>
       </div>
     );
