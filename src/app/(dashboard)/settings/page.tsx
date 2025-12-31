@@ -9,8 +9,9 @@ import { Separator } from "@/components/ui/separator";
 import { useSession } from "@/hooks/use-session";
 import { useSync } from "@/hooks/use-sync";
 import { db } from "@/lib/db";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { isSupabaseConfigured, getSupabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
@@ -18,6 +19,58 @@ export default function SettingsPage() {
   const { session, logout } = useSession();
   const eventId = session?.eventId ?? "";
   const sync = useSync(eventId);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteServerData = async () => {
+    if (!eventId || !isSupabaseConfigured()) {
+      toast.error("Not connected to server");
+      return;
+    }
+
+    const confirmed = confirm(
+      "⚠️ DANGER: This will permanently delete ALL guests and check-ins from the server for this event.\n\n" +
+      "This action cannot be undone!\n\n" +
+      "Are you absolutely sure?"
+    );
+    if (!confirmed) return;
+
+    const doubleConfirmed = confirm(
+      "Final confirmation: Type 'DELETE' mentally and click OK to proceed with permanent deletion."
+    );
+    if (!doubleConfirmed) return;
+
+    setIsDeleting(true);
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error("Supabase not available");
+
+      // Delete checkins first (foreign key constraint)
+      const { error: checkinsError } = await supabase
+        .from("checkins")
+        .delete()
+        .eq("event_id", eventId);
+      if (checkinsError) throw checkinsError;
+
+      // Delete guests
+      const { error: guestsError } = await supabase
+        .from("guests")
+        .delete()
+        .eq("event_id", eventId);
+      if (guestsError) throw guestsError;
+
+      // Clear local data too
+      await db.guests.where("event_id").equals(eventId).delete();
+      await db.checkins.where("event_id").equals(eventId).delete();
+      await db.outbox.clear();
+
+      toast.success("All server data deleted for this event");
+    } catch (error) {
+      console.error("Failed to delete server data:", error);
+      toast.error("Failed to delete server data: " + (error as Error).message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleClearLocalData = async () => {
     if (!confirm("This will delete all local data. Are you sure?")) return;
@@ -160,13 +213,24 @@ export default function SettingsPage() {
               Sign Out
             </Button>
             <Button
-              variant="destructive"
+              variant="outline"
               onClick={handleClearLocalData}
               className="gap-2"
             >
               <Trash2 className="h-4 w-4" />
-              Clear All Local Data
+              Clear Local Data
             </Button>
+            {isSupabaseConfigured() && (
+              <Button
+                variant="destructive"
+                onClick={handleDeleteServerData}
+                disabled={isDeleting || !eventId}
+                className="gap-2"
+              >
+                <Database className="h-4 w-4" />
+                {isDeleting ? "Deleting..." : "Delete All Server Data"}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
