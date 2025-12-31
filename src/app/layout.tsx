@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NYE Party 2025 - Check-In",
-  description: "Guest check-in system for NYE Party 2025",
+  title: "NYE Party 2026 - Check-In",
+  description: "Guest check-in system for NYE Party 2026",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

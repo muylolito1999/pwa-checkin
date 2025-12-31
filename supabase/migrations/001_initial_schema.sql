@@ -80,6 +80,6 @@ CREATE POLICY "Allow all access to events" ON events FOR ALL USING (true);
 CREATE POLICY "Allow all access to guests" ON guests FOR ALL USING (true);
 CREATE POLICY "Allow all access to checkins" ON checkins FOR ALL USING (true);
 
--- Insert default NYE Party 2025 event
+-- Insert default NYE Party 2026 event
 INSERT INTO events (name, date, access_code)
-VALUES ('NYE Party 2025', '2025-12-31', 'nye2025');
+VALUES ('NYE Party 2026', '2026-12-31', 'nye2026');

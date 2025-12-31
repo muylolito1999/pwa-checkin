@@ -1,4 +1,4 @@
-# NYE Party 2025 - Check-In System
+# NYE Party 2026 - Check-In System
 
 A production-ready Progressive Web Application for managing event check-ins. Offline-first, mobile-optimized, with real-time sync and statistics.
 

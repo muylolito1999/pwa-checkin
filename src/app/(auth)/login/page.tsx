@@ -32,7 +32,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      let eventName = "NYE Party 2025";
+      let eventName = "NYE Party 2026";
       let authenticated = false;
 
       const supabase = getSupabase();
@@ -89,8 +89,8 @@ export default function LoginPage() {
           // Create a local-only event automatically
           const newEvent = {
             id: eventId || crypto.randomUUID(),
-            name: "NYE Party 2025",
-            date: "2025-12-31",
+            name: "NYE Party 2026",
+            date: "2026-12-31",
             access_code: accessCode || null,
             settings: {},
             created_at: new Date().toISOString(),
@@ -133,7 +133,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
             <PartyPopper className="h-8 w-8 text-primary" />
           </div>
-          <CardTitle className="text-2xl">NYE Party 2025</CardTitle>
+          <CardTitle className="text-2xl">NYE Party 2026</CardTitle>
           <CardDescription>
             Enter your event credentials to access the check-in system
           </CardDescription>

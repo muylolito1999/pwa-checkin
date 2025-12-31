@@ -25,7 +25,7 @@ export function Header() {
       <div className="container flex h-14 items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Link href="/guests" className="flex items-center gap-2">
-            <span className="font-bold text-lg">🎉 NYE 2025</span>
+            <span className="font-bold text-lg">🎉 NYE 2026</span>
           </Link>
 
           {/* Online/Offline indicator */}

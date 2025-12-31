@@ -241,7 +241,7 @@ export default function SettingsPage() {
           <CardTitle>About</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          <p>NYE Party 2025 Check-In System</p>
+          <p>NYE Party 2026 Check-In System</p>
           <p>Version 1.0.0</p>
           <p className="mt-2">
             Offline-first PWA for managing event check-ins with real-time sync.
