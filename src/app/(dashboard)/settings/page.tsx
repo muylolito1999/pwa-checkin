@@ -64,10 +64,11 @@ export default function SettingsPage() {
       await db.outbox.clear();
 
       toast.success("All server data deleted for this event");
+      // Refresh the page to clear any cached data
+      window.location.reload();
     } catch (error) {
       console.error("Failed to delete server data:", error);
       toast.error("Failed to delete server data: " + (error as Error).message);
-    } finally {
       setIsDeleting(false);
     }
   };
