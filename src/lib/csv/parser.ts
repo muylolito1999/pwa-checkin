@@ -1,6 +1,7 @@
 import Papa from "papaparse";
 import { csvRowSchema } from "@/schemas";
 import { generateStableKey, generateId, db } from "@/lib/db";
+import { addToOutbox } from "@/lib/sync/outbox";
 import type { CsvValidationError, CsvImportResult, LocalGuest } from "@/types";
 
 interface RawCsvRow {
@@ -147,7 +148,7 @@ export async function importCsvToDatabase(
 
     if (existing) {
       // Update existing guest
-      await db.guests.update(existing.id, {
+      const updatedData = {
         first_name: titleCase(data.first_name),
         last_name: titleCase(data.last_name),
         notes: data.notes,
@@ -157,7 +158,12 @@ export async function importCsvToDatabase(
         is_deleted: false,
         updated_at: now,
         _pending_sync: true,
-      });
+      };
+      await db.guests.update(existing.id, updatedData);
+      const updatedGuest = await db.guests.get(existing.id);
+      if (updatedGuest) {
+        await addToOutbox("UPDATE", "guests", updatedGuest as unknown as Record<string, unknown>);
+      }
       updated++;
     } else {
       // Insert new guest
@@ -177,6 +183,7 @@ export async function importCsvToDatabase(
         _pending_sync: true,
       };
       await db.guests.add(newGuest);
+      await addToOutbox("CREATE", "guests", newGuest as unknown as Record<string, unknown>);
       imported++;
     }
 
