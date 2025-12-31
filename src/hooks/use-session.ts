@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type { Session } from "@/types";
 
 const SESSION_KEY = "pwa-checkin-session";
@@ -8,6 +9,7 @@ const SESSION_KEY = "pwa-checkin-session";
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const stored = localStorage.getItem(SESSION_KEY);
@@ -34,7 +36,8 @@ export function useSession() {
   const logout = useCallback(() => {
     localStorage.removeItem(SESSION_KEY);
     setSession(null);
-  }, []);
+    router.push("/");
+  }, [router]);
 
   return {
     session,
