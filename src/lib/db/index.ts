@@ -26,7 +26,9 @@ export const db = new CheckinDatabase();
 // Helper to generate stable key for guest deduplication
 export function generateStableKey(lastName: string, firstName: string): string {
   const normalized = `${lastName}_${firstName}`.toLowerCase().trim();
-  return btoa(normalized);
+  // Use TextEncoder to handle Unicode characters properly
+  const bytes = new TextEncoder().encode(normalized);
+  return btoa(String.fromCharCode(...bytes));
 }
 
 // Helper to get device ID (persistent per device)
