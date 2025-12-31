@@ -24,7 +24,17 @@ export function CsvDropzone({
       setIsDragOver(false);
 
       const file = e.dataTransfer.files[0];
-      if (file && file.type === "text/csv") {
+      
+      // Accept CSV files by extension OR MIME type (MIME types vary by OS/browser)
+      const isCSV = file && (
+        file.name.toLowerCase().endsWith('.csv') ||
+        file.type === 'text/csv' ||
+        file.type === 'application/vnd.ms-excel' ||
+        file.type === 'application/csv' ||
+        file.type === '' // Some systems don't set MIME type
+      );
+      
+      if (isCSV) {
         onFileSelect(file);
       }
     },

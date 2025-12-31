@@ -19,15 +19,15 @@ export function useStats({ eventId, bucketMinutes = 30 }: StatsOptions) {
   } | null> => {
     if (!eventId) return null;
 
-    // Get all guests
-    const guests = await db.guests
-      .where({ event_id: eventId, is_deleted: false })
-      .toArray();
+    // Get all guests (using simple filter for Dexie compatibility)
+    const allGuests = await db.guests.toArray();
+    const guests = allGuests.filter(g => g.event_id === eventId && !g.is_deleted);
 
-    // Get all checkins
-    const checkins = await db.checkins
-      .where({ event_id: eventId })
-      .sortBy("checked_in_at");
+    // Get all checkins (using simple filter)
+    const allCheckins = await db.checkins.toArray();
+    const checkins = allCheckins
+      .filter(c => c.event_id === eventId)
+      .sort((a, b) => new Date(a.checked_in_at).getTime() - new Date(b.checked_in_at).getTime());
 
     // Calculate check-in status per guest
     const guestCheckinStatus = new Map<string, boolean>();

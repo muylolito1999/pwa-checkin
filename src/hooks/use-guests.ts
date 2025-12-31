@@ -26,10 +26,9 @@ export function useGuests({
   const guests = useLiveQuery(async () => {
     if (!eventId) return [];
 
-    // Get all non-deleted guests for this event
-    let guestList = await db.guests
-      .where({ event_id: eventId, is_deleted: false })
-      .toArray();
+    // Get all guests and filter in JavaScript for better Dexie compatibility
+    const allGuests = await db.guests.toArray();
+    let guestList = allGuests.filter(g => g.event_id === eventId && g.is_deleted === false);
 
     // Apply search filter
     if (search) {
@@ -94,9 +93,9 @@ export function useGuestGroups(eventId: string) {
   const groups = useLiveQuery(async () => {
     if (!eventId) return [];
 
-    const guests = await db.guests
-      .where({ event_id: eventId, is_deleted: false })
-      .toArray();
+    // Get all guests and filter in JavaScript for better Dexie compatibility
+    const allGuests = await db.guests.toArray();
+    const guests = allGuests.filter(g => g.event_id === eventId && !g.is_deleted);
 
     const groupSet = new Set(guests.map((g) => g.group).filter(Boolean));
     return Array.from(groupSet).sort() as string[];

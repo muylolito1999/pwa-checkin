@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSession } from "@/hooks/use-session";
 import { db } from "@/lib/db";
-import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSupabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -36,41 +36,46 @@ export default function LoginPage() {
       let authenticated = false;
 
       const supabase = getSupabase();
+      let supabaseSuccess = false;
+      
       if (supabase) {
-        // Online: Validate against Supabase
-        const { data, error } = await supabase
-          .from("events")
-          .select("id, name, access_code")
-          .eq("id", eventId)
-          .single();
+        // Online: Try to validate against Supabase
+        try {
+          const { data, error } = await supabase
+            .from("events")
+            .select("id, name, access_code")
+            .eq("id", eventId)
+            .single();
 
-        if (error || !data) {
-          toast.error("Event not found");
-          setLoading(false);
-          return;
+          if (!error && data) {
+            if (data.access_code && data.access_code !== accessCode) {
+              toast.error("Invalid access code");
+              setLoading(false);
+              return;
+            }
+
+            eventName = data.name;
+            authenticated = true;
+            supabaseSuccess = true;
+
+            // Sync event to local DB
+            await db.events.put({
+              id: data.id,
+              name: data.name,
+              date: new Date().toISOString().split("T")[0],
+              access_code: data.access_code,
+              settings: {},
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+        } catch {
+          // Supabase failed, will try offline mode
         }
-
-        if (data.access_code && data.access_code !== accessCode) {
-          toast.error("Invalid access code");
-          setLoading(false);
-          return;
-        }
-
-        eventName = data.name;
-        authenticated = true;
-
-        // Sync event to local DB
-        await db.events.put({
-          id: data.id,
-          name: data.name,
-          date: new Date().toISOString().split("T")[0],
-          access_code: data.access_code,
-          settings: {},
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      } else {
-        // Offline mode: Use local DB or default event
+      }
+      
+      // Fallback to offline/local mode if Supabase didn't work
+      if (!supabaseSuccess) {
         const localEvent = await db.events.get(eventId);
         if (localEvent) {
           if (localEvent.access_code && localEvent.access_code !== accessCode) {
@@ -80,8 +85,8 @@ export default function LoginPage() {
           }
           eventName = localEvent.name;
           authenticated = true;
-        } else if (offlineMode) {
-          // Allow creating a local-only event
+        } else {
+          // Create a local-only event automatically
           const newEvent = {
             id: eventId || crypto.randomUUID(),
             name: "NYE Party 2025",
@@ -94,12 +99,8 @@ export default function LoginPage() {
           await db.events.put(newEvent);
           eventName = newEvent.name;
           authenticated = true;
-          setEventId(newEvent.id);
-        } else {
-          setOfflineMode(true);
-          toast.info("Supabase not configured. Click again to create a local event.");
-          setLoading(false);
-          return;
+          if (!eventId) setEventId(newEvent.id);
+          toast.info("Created local event (offline mode)");
         }
       }
 
