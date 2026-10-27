@@ -9,12 +9,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle } from "lucide-react";
+import { CircleAlert, CircleCheck } from "lucide-react";
+import { normalizeHeader, type RawCsvRow } from "@/lib/csv/parser";
 import type { CsvValidationError } from "@/types";
-
-interface RawCsvRow {
-  [key: string]: string;
-}
 
 interface CsvPreviewProps {
   data: RawCsvRow[];
@@ -47,23 +44,16 @@ export function CsvPreview({
     "ticket_code",
   ];
 
+  const normalizedHeaders = headers.map(normalizeHeader);
   const hasRequiredHeaders =
-    headers.some((h) =>
-      ["first_name", "firstname", "name", "nome"].includes(h.toLowerCase())
-    ) &&
-    headers.some((h) =>
-      ["last_name", "lastname", "surname", "cognome"].includes(h.toLowerCase())
-    );
+    normalizedHeaders.includes("first_name") && normalizedHeaders.includes("last_name");
 
   return (
     <div className="space-y-4">
       {/* Header validation */}
       <div className="flex flex-wrap gap-2">
         {expectedHeaders.map((expected) => {
-          const found = headers.some((h) => {
-            const normalized = h.toLowerCase().replace(/[\s_-]+/g, "_");
-            return normalized === expected || normalized.includes(expected.split("_")[0]);
-          });
+          const found = normalizedHeaders.includes(expected);
           const isRequired = expected === "first_name" || expected === "last_name";
 
           return (
@@ -73,9 +63,9 @@ export function CsvPreview({
               className="gap-1"
             >
               {found ? (
-                <CheckCircle className="h-3 w-3" />
+                <CircleCheck className="h-3 w-3" />
               ) : (
-                <AlertCircle className="h-3 w-3" />
+                <CircleAlert className="h-3 w-3" />
               )}
               {expected}
             </Badge>
@@ -85,7 +75,7 @@ export function CsvPreview({
 
       {!hasRequiredHeaders && (
         <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" />
+          <CircleAlert className="h-4 w-4" />
           Missing required columns: first_name and/or last_name
         </div>
       )}
@@ -121,12 +111,12 @@ export function CsvPreview({
                   <TableCell>
                     {rowErrors ? (
                       <Badge variant="destructive" className="gap-1">
-                        <AlertCircle className="h-3 w-3" />
+                        <CircleAlert className="h-3 w-3" />
                         {rowErrors.length} error{rowErrors.length > 1 ? "s" : ""}
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="gap-1 text-green-600">
-                        <CheckCircle className="h-3 w-3" />
+                        <CircleCheck className="h-3 w-3" />
                         Valid
                       </Badge>
                     )}

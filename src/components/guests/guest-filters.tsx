@@ -36,7 +36,9 @@ export function GuestFilters({
       <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          type="search"
           placeholder="Search by name, ticket code..."
+          aria-label="Search guests"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-9"
@@ -59,12 +61,12 @@ export function GuestFilters({
         </Select>
       )}
 
-      <div className="flex gap-1 rounded-lg border p-1">
+      <div className="flex gap-1 rounded-lg border p-1" role="group" aria-label="Filter by status">
         {(
           [
             { value: "all", label: "All" },
             { value: "checked-in", label: "In" },
-            { value: "not-arrived", label: "Out" },
+            { value: "not-arrived", label: "Not arrived" },
           ] as const
         ).map((option) => (
           <Button
@@ -72,6 +74,7 @@ export function GuestFilters({
             variant="ghost"
             size="sm"
             onClick={() => onStatusFilterChange(option.value)}
+            aria-pressed={statusFilter === option.value}
             className={cn(
               "px-3",
               statusFilter === option.value &&

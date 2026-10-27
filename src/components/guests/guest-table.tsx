@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import {
+  createColumnHelper,
+  createSortedRowModel,
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
@@ -32,26 +34,28 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckInButton } from "./check-in-button";
-import { deleteGuest } from "@/hooks/use-guests";
+import { deleteGuest } from "@/lib/db/mutations";
+import type { GuestWithStatus } from "@/hooks/use-guests";
 import { toast } from "sonner";
-import type { LocalGuest } from "@/types";
 import { cn } from "@/lib/utils";
-
-interface GuestWithStatus extends LocalGuest {
-  isCheckedIn: boolean;
-  checkInTime: string | null;
-  entryCount: number;
-}
 
 interface GuestTableProps {
   guests: GuestWithStatus[];
   eventId: string;
 }
 
+// TanStack Table v9: features are declared explicitly. Kept at module scope so the
+// feature set (and the column helper derived from it) is stable across renders.
+const features = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+});
+const columnHelper = createColumnHelper<typeof features, GuestWithStatus>();
+
 function formatTime(isoString: string | null): string {
   if (!isoString) return "";
   const date = new Date(isoString);
-  return date.toLocaleTimeString("it-IT", {
+  return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -65,12 +69,13 @@ function DeleteGuestButton({
   eventId: string;
 }) {
   const [loading, setLoading] = useState(false);
+  const guestName = `${guest.first_name} ${guest.last_name}`;
 
   const handleDelete = async () => {
     setLoading(true);
     try {
       await deleteGuest(guest.id, eventId);
-      toast.success(`Removed ${guest.first_name} ${guest.last_name}`);
+      toast.success(`Removed ${guestName}`);
     } catch (error) {
       toast.error("Failed to remove guest");
       console.error(error);
@@ -82,7 +87,12 @@ function DeleteGuestButton({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          aria-label={`Remove ${guestName}`}
+        >
           <Trash2 className="h-4 w-4" />
         </Button>
       </AlertDialogTrigger>
@@ -90,8 +100,7 @@ function DeleteGuestButton({
         <AlertDialogHeader>
           <AlertDialogTitle>Remove Guest</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to remove{" "}
-            <strong>{guest.first_name} {guest.last_name}</strong> from the guest list?
+            Are you sure you want to remove <strong>{guestName}</strong> from the guest list?
             {guest.entryCount > 0 && (
               <span className="block mt-2 text-orange-500">
                 This guest has {guest.entryCount} check-in record(s) that will also be deleted.
@@ -115,12 +124,16 @@ function DeleteGuestButton({
 }
 
 export function GuestTable({ guests, eventId }: GuestTableProps) {
+  // TanStack Table manages its own reactivity; opt this component out of the React Compiler.
+  "use no memo";
+
   const [sorting, setSorting] = useState<SortingState>([]);
 
-  const columns = useMemo<ColumnDef<GuestWithStatus>[]>(
+  // The accessor/display helpers return narrower TValue types than ColumnDef<..., unknown>;
+  // the cast is the documented way to collect them into one column array.
+  const columns = useMemo<ColumnDef<typeof features, GuestWithStatus>[]>(
     () => [
-      {
-        accessorKey: "last_name",
+      columnHelper.accessor("last_name", {
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -143,17 +156,15 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
             )}
           </div>
         ),
-      },
-      {
-        accessorKey: "group",
+      }),
+      columnHelper.accessor("group", {
         header: "Group",
         cell: ({ row }) =>
           row.original.group ? (
             <Badge variant="outline">{row.original.group}</Badge>
           ) : null,
-      },
-      {
-        accessorKey: "isCheckedIn",
+      }),
+      columnHelper.accessor("isCheckedIn", {
         header: "Status",
         cell: ({ row }) => {
           const { isCheckedIn, checkInTime, entryCount } = row.original;
@@ -181,8 +192,8 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
             </div>
           );
         },
-      },
-      {
+      }),
+      columnHelper.display({
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -196,18 +207,17 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
             <DeleteGuestButton guest={row.original} eventId={eventId} />
           </div>
         ),
-      },
-    ],
+      }),
+    ] as ColumnDef<typeof features, GuestWithStatus>[],
     [eventId]
   );
 
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data: guests,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   });
 
   if (guests.length === 0) {
@@ -231,10 +241,7 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
                 <TableHead key={header.id}>
                   {header.isPlaceholder
                     ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
+                    : flexRender(header.column.columnDef.header, header.getContext())}
                 </TableHead>
               ))}
             </TableRow>
@@ -244,11 +251,9 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
           {table.getRowModel().rows.map((row) => (
             <TableRow
               key={row.id}
-              className={cn(
-                row.original.isCheckedIn && "bg-green-500/5"
-              )}
+              className={cn(row.original.isCheckedIn && "bg-green-500/5")}
             >
-              {row.getVisibleCells().map((cell) => (
+              {row.getAllCells().map((cell) => (
                 <TableCell key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toggleCheckIn } from "@/hooks/use-guests";
+import { toggleCheckIn } from "@/lib/db/mutations";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

@@ -3,7 +3,6 @@ export interface Event {
   id: string;
   name: string;
   date: string;
-  access_code: string | null;
   settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -49,12 +48,22 @@ export type OutboxOperation = "CREATE" | "UPDATE" | "DELETE";
 
 export interface OutboxEntry {
   id?: number;
+  event_id: string;
   table: "guests" | "checkins";
   operation: OutboxOperation;
   record_id: string;
   data: Record<string, unknown>;
   timestamp: string;
   retries: number;
+  /** ISO timestamp before which the entry is not retried (exponential backoff). */
+  next_attempt_at?: string | null;
+  last_error?: string | null;
+}
+
+/** Small key/value table for sync watermarks and other device-local state. */
+export interface SyncMeta {
+  key: string;
+  value: string;
 }
 
 // CSV Import types
@@ -85,7 +94,8 @@ export interface GuestStats {
   total: number;
   checkedIn: number;
   notArrived: number;
-  checkouts: number;
+  /** Guests whose latest record is a check-out. */
+  left: number;
 }
 
 export interface TimeSlotStats {
@@ -93,9 +103,17 @@ export interface TimeSlotStats {
   count: number;
 }
 
+export interface RecentCheckin {
+  id: string;
+  name: string;
+  time: string;
+  type: "IN" | "OUT";
+}
+
 // Auth types
 export interface Session {
   eventId: string;
   eventName: string;
+  eventDate?: string | null;
   authenticated: boolean;
 }

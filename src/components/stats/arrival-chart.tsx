@@ -23,7 +23,7 @@ interface ArrivalChartProps {
 
 function formatTime(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleTimeString("it-IT", {
+  return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -106,7 +106,7 @@ export function ArrivalChart({ histogram, timeline, peakWindow }: ArrivalChartPr
                   />
                   <Bar
                     dataKey="count"
-                    fill="hsl(var(--primary))"
+                    fill="var(--chart-1)"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
@@ -147,7 +147,7 @@ export function ArrivalChart({ histogram, timeline, peakWindow }: ArrivalChartPr
                   <Line
                     type="monotone"
                     dataKey="count"
-                    stroke="hsl(var(--primary))"
+                    stroke="var(--chart-1)"
                     strokeWidth={2}
                     dot={false}
                   />

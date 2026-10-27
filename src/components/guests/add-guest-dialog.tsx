@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addGuestManual, checkDuplicateGuest } from "@/hooks/use-guests";
+import { addGuestManual, checkDuplicateGuest } from "@/lib/db/mutations";
 import { toast } from "sonner";
 
 interface AddGuestDialogProps {
@@ -118,7 +118,7 @@ export function AddGuestDialog({ eventId }: AddGuestDialogProps) {
             </div>
             {duplicateWarning && (
               <div className="flex items-center gap-2 rounded-lg bg-yellow-500/10 p-3 text-sm text-yellow-600 dark:text-yellow-400">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <TriangleAlert className="h-4 w-4 shrink-0" />
                 <span>{duplicateWarning}</span>
               </div>
             )}

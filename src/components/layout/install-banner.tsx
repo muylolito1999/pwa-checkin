@@ -3,6 +3,7 @@
 import { Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
+import { APP_NAME } from "@/lib/event-config";
 
 export function InstallBanner() {
   const { canInstall, install, dismiss } = usePwaInstall();
@@ -13,7 +14,7 @@ export function InstallBanner() {
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 sm:p-6">
       <div className="container flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-center sm:text-left">
-          <p className="font-medium">Install NYE Check-In</p>
+          <p className="font-medium">Install {APP_NAME}</p>
           <p className="text-sm text-muted-foreground">
             Add to home screen for the best experience
           </p>

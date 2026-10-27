@@ -33,8 +33,8 @@ export function StatCards({ stats }: StatCardsProps) {
       bgColor: "bg-orange-500/10",
     },
     {
-      title: "Check-outs",
-      value: stats.checkouts,
+      title: "Left",
+      value: stats.left,
       icon: LogOut,
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",

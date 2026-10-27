@@ -72,7 +72,7 @@ export function CsvDropzone({
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClear}>
+        <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selected file">
           <X className="h-4 w-4" />
         </Button>
       </div>

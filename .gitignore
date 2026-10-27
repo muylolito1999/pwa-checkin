@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# serwist (generated service worker)
+public/sw.js
+public/sw.js.map
+public/swe-worker-*.js
+
+# editor/agent logs and local env scripts
+.cursor/
+claude_code_zai_env.sh

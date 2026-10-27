@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { LocalGuest, LocalCheckin, OutboxEntry, Event } from "@/types";
+import { v5 as uuidv5 } from "uuid";
+import type { LocalGuest, LocalCheckin, OutboxEntry, Event, SyncMeta } from "@/types";
 
 // Database singleton
 class CheckinDatabase extends Dexie {
@@ -7,6 +8,7 @@ class CheckinDatabase extends Dexie {
   guests!: EntityTable<LocalGuest, "id">;
   checkins!: EntityTable<LocalCheckin, "id">;
   outbox!: EntityTable<OutboxEntry, "id">;
+  meta!: EntityTable<SyncMeta, "key">;
 
   constructor() {
     super("pwa-checkin-db");
@@ -17,6 +19,30 @@ class CheckinDatabase extends Dexie {
       checkins: "id, event_id, guest_id, checked_in_at, type, _pending_sync",
       outbox: "++id, table, timestamp, retries",
     });
+
+    // v2: booleans are not valid IndexedDB keys, so the is_deleted/_pending_sync
+    // indexes never worked (every query fell back to full-table scans). Index by
+    // event instead, add a compound index for a guest's check-ins, scope the outbox
+    // by event, and add a meta table for sync watermarks.
+    this.version(2)
+      .stores({
+        events: "id",
+        guests: "id, event_id, [event_id+stable_key]",
+        checkins: "id, event_id, guest_id, [event_id+guest_id], checked_in_at",
+        outbox: "++id, event_id, next_attempt_at",
+        meta: "key",
+      })
+      .upgrade((tx) =>
+        tx
+          .table("outbox")
+          .toCollection()
+          .modify((entry: OutboxEntry) => {
+            if (!entry.event_id) {
+              const data = entry.data as { event_id?: unknown } | undefined;
+              entry.event_id = typeof data?.event_id === "string" ? data.event_id : "";
+            }
+          })
+      );
   }
 }
 
@@ -29,6 +55,19 @@ export function generateStableKey(lastName: string, firstName: string): string {
   // Use TextEncoder to handle Unicode characters properly
   const bytes = new TextEncoder().encode(normalized);
   return btoa(String.fromCharCode(...bytes));
+}
+
+// Fixed namespace for deterministic guest ids. Never change it: every device must
+// derive the same id for the same (event, stable_key) pair.
+const GUEST_ID_NAMESPACE = "6f1c2a7e-3b5d-4c8e-9a1f-2d4b6c8e0a12";
+
+/**
+ * Deterministic guest id. Two devices importing the same CSV (even offline)
+ * produce identical ids, so upserts converge on one server row and check-ins
+ * from both devices reference the same guest.
+ */
+export function generateGuestId(eventId: string, stableKey: string): string {
+  return uuidv5(`${eventId}:${stableKey}`, GUEST_ID_NAMESPACE);
 }
 
 // Helper to get device ID (persistent per device)
@@ -45,4 +84,16 @@ export function getDeviceId(): string {
 // Helper to generate UUID
 export function generateId(): string {
   return crypto.randomUUID();
+}
+
+export async function getMeta(key: string): Promise<string | null> {
+  return (await db.meta.get(key))?.value ?? null;
+}
+
+export async function setMeta(key: string, value: string): Promise<void> {
+  await db.meta.put({ key, value });
+}
+
+export async function deleteMeta(key: string): Promise<void> {
+  await db.meta.delete(key);
 }

@@ -1,15 +1,18 @@
 import Papa from "papaparse";
-import { csvRowSchema } from "@/schemas";
-import { generateStableKey, generateId, db } from "@/lib/db";
+import { csvRowSchema, type CsvRowOutput } from "@/schemas";
+import { db, generateGuestId, generateStableKey } from "@/lib/db";
 import { addToOutbox } from "@/lib/sync/outbox";
 import type { CsvValidationError, CsvImportResult, LocalGuest } from "@/types";
 
-interface RawCsvRow {
+export interface RawCsvRow {
   [key: string]: string;
 }
 
+/** Rows per Dexie transaction during import. */
+const IMPORT_CHUNK_SIZE = 200;
+
 // Normalize header names to match our expected format
-function normalizeHeader(header: string): string {
+export function normalizeHeader(header: string): string {
   const normalized = header.toLowerCase().trim().replace(/[\s_-]+/g, "_");
 
   // Common aliases
@@ -42,18 +45,17 @@ function normalizeHeader(header: string): string {
 function normalizeRow(row: RawCsvRow): RawCsvRow {
   const normalized: RawCsvRow = {};
   for (const [key, value] of Object.entries(row)) {
-    const normalizedKey = normalizeHeader(key);
-    normalized[normalizedKey] = value;
+    normalized[normalizeHeader(key)] = value;
   }
   return normalized;
 }
 
-// Title case a name
-function titleCase(str: string): string {
+/** Title-cases a name, including accented letters and parts after apostrophes/hyphens. */
+export function titleCase(str: string): string {
   return str
     .trim()
     .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .replace(/(^|[\s'’-])(\p{L})/gu, (_, prefix: string, letter: string) => prefix + letter.toLocaleUpperCase());
 }
 
 export async function parseCsvFile(file: File): Promise<{
@@ -67,9 +69,7 @@ export async function parseCsvFile(file: File): Promise<{
       skipEmptyLines: true,
       transformHeader: (header) => header.trim(),
       complete: (results) => {
-        const errors = results.errors.map(
-          (e) => `Row ${e.row}: ${e.message}`
-        );
+        const errors = results.errors.map((e) => `Row ${e.row}: ${e.message}`);
         resolve({
           data: results.data,
           headers: results.meta.fields || [],
@@ -77,40 +77,39 @@ export async function parseCsvFile(file: File): Promise<{
         });
       },
       error: (error) => {
-        resolve({
-          data: [],
-          headers: [],
-          errors: [error.message],
-        });
+        resolve({ data: [], headers: [], errors: [error.message] });
       },
     });
   });
 }
 
-export function validateCsvRows(
-  rows: RawCsvRow[]
-): { valid: CsvImportResult["imported"]; errors: CsvValidationError[] } {
+function validateRows(rows: RawCsvRow[]): {
+  valid: Array<{ index: number; data: CsvRowOutput }>;
+  errors: CsvValidationError[];
+} {
+  const valid: Array<{ index: number; data: CsvRowOutput }> = [];
   const errors: CsvValidationError[] = [];
-  let valid = 0;
 
   rows.forEach((row, index) => {
-    const normalized = normalizeRow(row);
-    const result = csvRowSchema.safeParse(normalized);
-
-    if (!result.success) {
-      result.error.issues.forEach((err) => {
-        errors.push({
-          row: index + 1,
-          field: err.path.join("."),
-          message: err.message,
-        });
-      });
+    const result = csvRowSchema.safeParse(normalizeRow(row));
+    if (result.success) {
+      valid.push({ index, data: result.data });
     } else {
-      valid++;
+      for (const issue of result.error.issues) {
+        errors.push({ row: index + 1, field: issue.path.join("."), message: issue.message });
+      }
     }
   });
 
   return { valid, errors };
+}
+
+export function validateCsvRows(rows: RawCsvRow[]): {
+  valid: CsvImportResult["imported"];
+  errors: CsvValidationError[];
+} {
+  const { valid, errors } = validateRows(rows);
+  return { valid: valid.length, errors };
 }
 
 export async function importCsvToDatabase(
@@ -118,76 +117,60 @@ export async function importCsvToDatabase(
   eventId: string,
   onProgress?: (current: number, total: number) => void
 ): Promise<CsvImportResult> {
-  const errors: CsvValidationError[] = [];
+  const { valid, errors } = validateRows(rows);
   let imported = 0;
   let updated = 0;
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = normalizeRow(rows[i]);
-    const result = csvRowSchema.safeParse(row);
+  for (let start = 0; start < valid.length; start += IMPORT_CHUNK_SIZE) {
+    const chunk = valid.slice(start, start + IMPORT_CHUNK_SIZE);
 
-    if (!result.success) {
-      result.error.issues.forEach((err) => {
-        errors.push({
-          row: i + 1,
-          field: err.path.join("."),
-          message: err.message,
-        });
-      });
-      continue;
-    }
+    // One transaction per chunk: a row and its outbox entry always land together.
+    await db.transaction("rw", db.guests, db.outbox, async () => {
+      for (const { data } of chunk) {
+        const stableKey = generateStableKey(data.last_name, data.first_name);
+        const now = new Date().toISOString();
+        const existing = await db.guests.where({ event_id: eventId, stable_key: stableKey }).first();
 
-    const data = result.data;
-    const stableKey = generateStableKey(data.last_name, data.first_name);
-    const now = new Date().toISOString();
-
-    // Check for existing guest with same stable_key
-    const existing = await db.guests
-      .where({ event_id: eventId, stable_key: stableKey })
-      .first();
-
-    if (existing) {
-      // Update existing guest
-      const updatedData = {
-        first_name: titleCase(data.first_name),
-        last_name: titleCase(data.last_name),
-        notes: data.notes,
-        phone: data.phone,
-        group: data.group,
-        ticket_code: data.ticket_code,
-        is_deleted: false,
-        updated_at: now,
-        _pending_sync: true,
-      };
-      await db.guests.update(existing.id, updatedData);
-      const updatedGuest = await db.guests.get(existing.id);
-      if (updatedGuest) {
-        await addToOutbox("UPDATE", "guests", updatedGuest as unknown as Record<string, unknown>);
+        if (existing) {
+          const updatedGuest: LocalGuest = {
+            ...existing,
+            first_name: titleCase(data.first_name),
+            last_name: titleCase(data.last_name),
+            notes: data.notes,
+            phone: data.phone,
+            group: data.group,
+            ticket_code: data.ticket_code,
+            is_deleted: false,
+            updated_at: now,
+            _pending_sync: true,
+          };
+          await db.guests.put(updatedGuest);
+          await addToOutbox("UPDATE", "guests", updatedGuest as unknown as Record<string, unknown>);
+          updated++;
+        } else {
+          const newGuest: LocalGuest = {
+            id: generateGuestId(eventId, stableKey),
+            event_id: eventId,
+            first_name: titleCase(data.first_name),
+            last_name: titleCase(data.last_name),
+            notes: data.notes,
+            phone: data.phone,
+            group: data.group,
+            ticket_code: data.ticket_code,
+            stable_key: stableKey,
+            is_deleted: false,
+            created_at: now,
+            updated_at: now,
+            _pending_sync: true,
+          };
+          await db.guests.add(newGuest);
+          await addToOutbox("CREATE", "guests", newGuest as unknown as Record<string, unknown>);
+          imported++;
+        }
       }
-      updated++;
-    } else {
-      // Insert new guest
-      const newGuest: LocalGuest = {
-        id: generateId(),
-        event_id: eventId,
-        first_name: titleCase(data.first_name),
-        last_name: titleCase(data.last_name),
-        notes: data.notes,
-        phone: data.phone,
-        group: data.group,
-        ticket_code: data.ticket_code,
-        stable_key: stableKey,
-        is_deleted: false,
-        created_at: now,
-        updated_at: now,
-        _pending_sync: true,
-      };
-      await db.guests.add(newGuest);
-      await addToOutbox("CREATE", "guests", newGuest as unknown as Record<string, unknown>);
-      imported++;
-    }
+    });
 
-    onProgress?.(i + 1, rows.length);
+    onProgress?.(Math.min(start + IMPORT_CHUNK_SIZE, valid.length), valid.length);
   }
 
   return {
@@ -199,14 +182,7 @@ export async function importCsvToDatabase(
 }
 
 export function generateSampleCsv(): string {
-  const headers = [
-    "last_name",
-    "first_name",
-    "group",
-    "phone",
-    "notes",
-    "ticket_code",
-  ];
+  const headers = ["last_name", "first_name", "group", "phone", "notes", "ticket_code"];
   const rows = [
     ["Rossi", "Mario", "VIP", "3331234567", "Plus one", "TKT001"],
     ["Bianchi", "Lucia", "Staff", "", "Event coordinator", "TKT002"],

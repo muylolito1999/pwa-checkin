@@ -3,18 +3,15 @@
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import type { RecentCheckin } from "@/types";
 
 interface RecentCheckinsProps {
-  checkins: Array<{
-    name: string;
-    time: string;
-    type: "IN" | "OUT";
-  }>;
+  checkins: RecentCheckin[];
 }
 
 function formatTime(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleTimeString("it-IT", {
+  return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -42,9 +39,9 @@ export function RecentCheckins({ checkins }: RecentCheckinsProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {checkins.map((checkin, index) => (
+          {checkins.map((checkin) => (
             <div
-              key={index}
+              key={checkin.id}
               className="flex items-center gap-3 text-sm"
             >
               <div

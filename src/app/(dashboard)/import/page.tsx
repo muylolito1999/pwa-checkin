@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Download, Upload, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Download, Upload, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CsvDropzone } from "@/components/import/csv-dropzone";
@@ -11,18 +12,16 @@ import {
   validateCsvRows,
   importCsvToDatabase,
   generateSampleCsv,
+  type RawCsvRow,
 } from "@/lib/csv/parser";
 import { useSession } from "@/hooks/use-session";
 import { toast } from "sonner";
 import type { CsvValidationError } from "@/types";
 
-interface RawCsvRow {
-  [key: string]: string;
-}
-
 type ImportState = "idle" | "preview" | "importing" | "done";
 
 export default function ImportPage() {
+  const router = useRouter();
   const { session } = useSession();
   const eventId = session?.eventId ?? "";
 
@@ -189,7 +188,7 @@ export default function ImportPage() {
 
       {state === "importing" && (
         <div className="space-y-4 text-center py-8">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
+          <LoaderCircle className="h-12 w-12 animate-spin mx-auto text-primary" />
           <div>
             <p className="text-lg font-medium">Importing guests...</p>
             <p className="text-muted-foreground">{progress}% complete</p>
@@ -222,7 +221,7 @@ export default function ImportPage() {
             <Button variant="outline" onClick={handleClear}>
               Import Another
             </Button>
-            <Button onClick={() => (window.location.href = "/guests")}>
+            <Button onClick={() => router.push("/guests")}>
               View Guests
             </Button>
           </div>

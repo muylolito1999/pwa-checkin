@@ -7,6 +7,7 @@ import { GuestTable } from "@/components/guests/guest-table";
 import { GuestFilters } from "@/components/guests/guest-filters";
 import { AddGuestDialog } from "@/components/guests/add-guest-dialog";
 import { useDebounce } from "@/hooks/use-debounce";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function GuestsPage() {
   const { session } = useSession();
@@ -66,7 +67,15 @@ export default function GuestsPage() {
         onStatusFilterChange={handleStatusFilterChange}
       />
 
-      <GuestTable guests={guests} eventId={eventId} />
+      {guests === undefined ? (
+        <div className="space-y-2" aria-busy="true" aria-label="Loading guests">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-14" />
+          ))}
+        </div>
+      ) : (
+        <GuestTable guests={guests} eventId={eventId} />
+      )}
     </div>
   );
 }
