@@ -93,6 +93,9 @@ export function describeError(error: unknown): string {
   if (e?.code === "PGRST202") {
     return "Server function missing. Apply the latest Supabase migrations.";
   }
+  if (e?.code === "PGRST205") {
+    return "Server table missing. Apply the latest Supabase migrations.";
+  }
   if (isNetworkError(error)) return "Network unavailable";
   return e?.message || String(error);
 }

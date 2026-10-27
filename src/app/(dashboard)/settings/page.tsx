@@ -139,7 +139,7 @@ export default function SettingsPage() {
         await clearLocalEventData(eventId);
       });
       await sync.refreshStatus();
-      toast.success("All guests and check-ins for this event were deleted");
+      toast.success("All guests, tables and check-ins for this event were deleted");
     } catch (error) {
       console.error("Failed to delete server data:", error);
       toast.error(`Failed to delete server data: ${describeError(error)}`);
@@ -342,7 +342,7 @@ export default function SettingsPage() {
                 </Button>
               }
               title="Clear local data"
-              description="Removes every guest, check-in and queued change stored on this device, and signs you out. Changes that were not synced yet are lost."
+              description="Removes every guest, table, check-in and queued change stored on this device, and signs you out. Changes that were not synced yet are lost."
               confirmWord="CLEAR"
               pending={busy === "clear-local"}
               onConfirm={handleClearLocalData}
@@ -359,9 +359,9 @@ export default function SettingsPage() {
                 title="Delete all server data"
                 description={
                   <>
-                    Permanently deletes <strong>all guests and check-ins</strong> for{" "}
+                    Permanently deletes <strong>all guests, tables and check-ins</strong> for{" "}
                     <strong>{session?.eventName}</strong> from the server and from this device.
-                    Other devices will see the guests disappear on their next sync. This cannot be
+                    Other devices will see them disappear on their next sync. This cannot be
                     undone.
                   </>
                 }

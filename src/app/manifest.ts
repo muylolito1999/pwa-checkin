@@ -27,6 +27,7 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       { name: "Guests", url: "/guests" },
+      { name: "Tables", url: "/tables" },
       { name: "Statistics", url: "/stats" },
     ],
   };

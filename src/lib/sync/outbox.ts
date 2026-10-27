@@ -5,7 +5,7 @@ import {
   isAuthError,
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
-import type { OutboxEntry, OutboxOperation } from "@/types";
+import type { OutboxEntry, OutboxOperation, SyncTable } from "@/types";
 
 /** After this many failed attempts an entry is shown as "stuck" (it is still retried). */
 export const STUCK_THRESHOLD = 5;
@@ -22,7 +22,7 @@ export function getRetryDelay(retries: number): number {
 
 export async function addToOutbox(
   operation: OutboxOperation,
-  table: OutboxEntry["table"],
+  table: SyncTable,
   data: Record<string, unknown>
 ): Promise<void> {
   await db.outbox.add({
@@ -99,14 +99,21 @@ function stripLocalFields(data: Record<string, unknown>): Record<string, unknown
   return payload;
 }
 
-async function markSynced(table: OutboxEntry["table"], recordId: string): Promise<void> {
-  if (table === "guests") {
-    await db.guests.update(recordId, { _pending_sync: false });
-  } else {
-    await db.checkins.update(recordId, {
-      _pending_sync: false,
-      synced_at: new Date().toISOString(),
-    });
+async function markSynced(table: SyncTable, recordId: string): Promise<void> {
+  const syncedAt = new Date().toISOString();
+  switch (table) {
+    case "guests":
+      await db.guests.update(recordId, { _pending_sync: false });
+      break;
+    case "event_tables":
+      await db.event_tables.update(recordId, { _pending_sync: false });
+      break;
+    case "checkins":
+      await db.checkins.update(recordId, { _pending_sync: false, synced_at: syncedAt });
+      break;
+    case "table_arrivals":
+      await db.table_arrivals.update(recordId, { _pending_sync: false, synced_at: syncedAt });
+      break;
   }
 }
 
@@ -132,16 +139,24 @@ async function processEntry(entry: OutboxEntry): Promise<void> {
     }
 
     case "DELETE": {
-      if (table === "checkins") {
-        const { error } = await supabase.from("checkins").delete().eq("id", record_id);
-        if (error) throw error;
-      } else {
-        // Guests are soft-deleted so other devices learn about the removal via pull.
-        const { error } = await supabase
-          .from("guests")
-          .update({ is_deleted: true })
-          .eq("id", record_id);
-        if (error) throw error;
+      switch (table) {
+        // Append-only logs are deleted for real (only ever done together with their parent).
+        case "checkins":
+        case "table_arrivals": {
+          const { error } = await supabase.from(table).delete().eq("id", record_id);
+          if (error) throw error;
+          break;
+        }
+        // Guests and tables are soft-deleted so other devices learn about the removal via pull.
+        case "guests":
+        case "event_tables": {
+          const { error } = await supabase
+            .from(table)
+            .update({ is_deleted: true })
+            .eq("id", record_id);
+          if (error) throw error;
+          break;
+        }
       }
       break;
     }

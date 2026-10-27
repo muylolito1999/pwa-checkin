@@ -6,6 +6,7 @@ Offline-first Progressive Web App for checking guests in at PROM HALLOWEEN (and 
 
 - **Guest management**: import guests from CSV, add or remove them by hand, search by name, phone or ticket code
 - **One-tap check-in / check-out** with large touch targets
+- **Tables**: group reservations ("Marco, 10 seats") with partial arrivals (+1, +N, corrections) and the remaining seats always in view; over-capacity is allowed and flagged
 - **Live statistics**: arrivals per time slot, cumulative timeline, peak window, recent activity
 - **Installable PWA** that keeps working offline (update prompt instead of silent takeover)
 - **Background sync** on every page: push queue with retry and backoff, incremental paginated pulls, never drops a change
@@ -56,6 +57,7 @@ Without these variables the app runs in **local-only mode**: a single device, no
    - `004_server_timestamps.sql`
    - `005_auth_and_rls.sql`
    - `006_prom_halloween_event.sql` (renames the seeded event; edit the date if needed)
+   - `007_tables.sql` (tables and arrivals; apply before deploying a version with the Tables tab)
 3. Create your event (the access code is stored hashed):
 
    ```sql
@@ -83,8 +85,9 @@ npm run typecheck    # tsc --noEmit
 1. **Sign in** on each device with the Event ID and access code. The device signs in anonymously to Supabase and becomes a member of the event. Afterwards it can reload and keep working offline.
 2. **Import** guests from CSV (Import tab). Required columns: `first_name`, `last_name`. Optional: `group`, `phone`, `notes`, `ticket_code`. Common Italian/English header aliases are recognized (`nome`, `cognome`, `telefono`, …). Re-importing updates existing guests by name.
 3. **Check in** from the Guests tab. Tap *Check in* / *Check out*; the row shows the time and the number of entries.
-4. **Stats** shows live counters, the arrivals histogram and the latest activity for the data on this device (synced every 30 s).
-5. **Settings** shows sync status (pending and stuck changes with *Retry* / *Discard*), theme, *Clear local data* and *Delete all server data* (typed confirmation).
+4. **Tables** holds group reservations that are not on the guest list. Add a table with a name and the reserved seats, then record arrivals as people show up: *+1*, *−1* (correction) or *+N* for a group. Each card shows arrived / seats, the remaining seats, or how many came over capacity.
+5. **Stats** shows live counters, the arrivals histogram and the latest activity for the data on this device (synced every 30 s). Table seats count as expected guests and table arrivals as checked in.
+6. **Settings** shows sync status (pending and stuck changes with *Retry* / *Discard*), theme, *Clear local data* and *Delete all server data* (typed confirmation).
 
 ### Next event
 
@@ -113,12 +116,13 @@ No code change is needed. Insert a new `events` row (see step 3 above) and sign 
 - **Pull** (`src/lib/sync/engine.ts`): rows changed since the last server timestamp seen, paginated, 60 s overlap for safety. Timestamps are set by Postgres (migration 004), never by device clocks.
 - **Lifecycle**: the engine runs for the whole dashboard (`SyncProvider`): on an interval, when the device comes back online and when the tab returns to the foreground. Concurrent runs share one in-flight sync.
 - **Conflicts**: last write wins by server `updated_at`; a local change that is still pending always wins locally until it is pushed.
+- **Table arrivals** are an append-only log of signed deltas (`+5`, `-1`), never a counter: the number of people at a table is the sum, so two devices recording arrivals offline at the same time both count.
 - The service worker never caches Supabase responses.
 
 ## Security model
 
 - Each device has an anonymous Supabase user. `join_event(event_id, code)` verifies the bcrypt-hashed access code and records the membership.
-- RLS allows members to read and write only their event's guests and check-ins. The anon key alone cannot read anything; the hash column is not readable at all.
+- RLS allows members to read and write only their event's guests, tables and check-ins. The anon key alone cannot read anything; the hash column is not readable at all.
 - Anonymous users accumulate; migration 005 includes a housekeeping query to delete old ones.
 
 ## Deployment (Vercel)
@@ -135,7 +139,7 @@ src/
 ├── app/
 │   ├── (auth)/login/        # Login (join_event RPC, offline fallback, local-only mode)
 │   ├── (dashboard)/         # Protected routes + SyncProvider
-│   │   ├── guests/ import/ stats/ settings/
+│   │   ├── guests/ tables/ import/ stats/ settings/
 │   │   └── loading.tsx
 │   ├── serwist/[path]/      # Service worker route handler (Turbopack)
 │   ├── ~offline/            # Offline fallback page
@@ -144,25 +148,27 @@ src/
 │   ├── error.tsx  not-found.tsx  layout.tsx
 ├── components/
 │   ├── ui/                  # shadcn/ui primitives
-│   ├── layout/  guests/  import/  stats/
+│   ├── layout/  guests/  tables/  import/  stats/
 │   └── providers/           # theme, sync, service-worker update toast
 ├── hooks/                   # use-guests, use-stats, use-sync, use-session, …
 ├── lib/
-│   ├── db/                  # Dexie schema (v2) + transactional mutations
+│   ├── db/                  # Dexie schema (v3) + transactional mutations
 │   ├── sync/                # outbox (push) + engine (pull, lock, status)
 │   ├── supabase/            # client, anonymous sign-in, error helpers
 │   ├── csv/                 # CSV parsing and chunked import
+│   ├── tables.ts            # Arrival sums, table status and totals (shared by Tables and Stats)
 │   ├── session-store.ts     # localStorage session via useSyncExternalStore
 │   └── event-config.ts      # app name, version, sync interval
 ├── schemas/                 # zod schemas
 └── types/
 scripts/generate-icons.mjs   # regenerates public/icons/*.png
-supabase/migrations/         # 001 … 006
+supabase/migrations/         # 001 … 007
 ```
 
 ## Troubleshooting
 
 - **"Server function missing"** on login: migrations 003–005 have not been applied.
+- **"Server table missing"** in Settings: migration 007 has not been applied. Guests still sync; tables wait until it is.
 - **"Anonymous sign-ins are disabled"**: enable the provider in Supabase Auth settings.
 - **"This device is not a member of the event"**: the device's auth session was lost (storage cleared). Sign out and sign in again with the access code.
 - **Changes stuck in Settings**: read the error shown, fix the cause (usually connectivity or membership), then *Retry*. *Discard* drops the local change and accepts the server's version.

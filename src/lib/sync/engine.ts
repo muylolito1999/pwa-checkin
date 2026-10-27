@@ -6,7 +6,17 @@ import {
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
 import { processOutbox, STUCK_THRESHOLD, type PushResult } from "./outbox";
-import type { Checkin, Guest, LocalCheckin, LocalGuest } from "@/types";
+import {
+  SYNC_TABLES,
+  type Checkin,
+  type EventTable,
+  type Guest,
+  type LocalCheckin,
+  type LocalEventTable,
+  type LocalTableArrival,
+  type SyncTable,
+  type TableArrival,
+} from "@/types";
 
 export interface SyncStatus {
   lastSync: string | null;
@@ -16,14 +26,18 @@ export interface SyncStatus {
   error: string | null;
 }
 
+export type PulledCounts = Record<SyncTable, number>;
+
 export interface SyncResult {
   pushed: PushResult;
-  pulled: { guests: number; checkins: number };
+  pulled: PulledCounts;
 }
+
+const EMPTY_PULLED: PulledCounts = { guests: 0, checkins: 0, event_tables: 0, table_arrivals: 0 };
 
 const EMPTY_RESULT: SyncResult = {
   pushed: { processed: 0, failed: 0 },
-  pulled: { guests: 0, checkins: 0 },
+  pulled: EMPTY_PULLED,
 };
 
 /** Supabase caps a single request at 1000 rows by default. */
@@ -39,8 +53,11 @@ const lastSyncKey = (eventId: string) => `last-sync:${eventId}`;
 // Pull
 // ---------------------------------------------------------------------------
 
-// Last-Write-Wins merge for guests. Timestamps are server-authoritative.
-function mergeGuest(local: LocalGuest, remote: Guest): LocalGuest {
+// Last-Write-Wins merge for mutable rows (guests, tables). Timestamps are server-authoritative.
+function mergeLww<T extends { updated_at: string }>(
+  local: T & { _pending_sync?: boolean },
+  remote: T
+): T & { _pending_sync?: boolean } {
   // A local change that hasn't been pushed yet takes precedence (optimistic UI).
   if (local._pending_sync) return local;
 
@@ -70,7 +87,7 @@ function sinceWithMargin(watermark: string | null): string {
 }
 
 async function pullTable<T extends { id: string }>(
-  table: "guests" | "checkins",
+  table: SyncTable,
   eventId: string,
   timestampColumn: "updated_at" | "created_at",
   apply: (rows: T[]) => Promise<number>
@@ -117,7 +134,7 @@ async function applyRemoteGuests(rows: Guest[]): Promise<number> {
   await db.transaction("rw", db.guests, db.checkins, async () => {
     for (const remote of rows) {
       const local = await db.guests.get(remote.id);
-      const merged = local ? mergeGuest(local, remote) : { ...remote, _pending_sync: false };
+      const merged = local ? mergeLww(local, remote) : { ...remote, _pending_sync: false };
       if (merged === local) continue;
 
       await db.guests.put(merged);
@@ -152,11 +169,67 @@ async function applyRemoteCheckins(rows: Checkin[]): Promise<number> {
   return added;
 }
 
-export async function pullFromServer(eventId: string): Promise<SyncResult["pulled"]> {
-  if (!isSupabaseConfigured()) return { guests: 0, checkins: 0 };
+async function applyRemoteTables(rows: EventTable[]): Promise<number> {
+  let changed = 0;
+  await db.transaction("rw", db.event_tables, db.table_arrivals, async () => {
+    for (const remote of rows) {
+      const local = await db.event_tables.get(remote.id);
+      const merged: LocalEventTable = local
+        ? mergeLww(local, remote)
+        : { ...remote, _pending_sync: false };
+      if (merged === local) continue;
+
+      await db.event_tables.put(merged);
+      changed++;
+      // A table removed on another device takes its arrivals with it.
+      if (merged.is_deleted && !local?.is_deleted) {
+        await db.table_arrivals.where("table_id").equals(remote.id).delete();
+      }
+    }
+  });
+  return changed;
+}
+
+async function applyRemoteTableArrivals(rows: TableArrival[]): Promise<number> {
+  let added = 0;
+  await db.transaction("rw", db.table_arrivals, db.event_tables, async () => {
+    const existing = await db.table_arrivals.bulkGet(rows.map((row) => row.id));
+    const known = new Set(existing.filter(Boolean).map((row) => row!.id));
+    const tables = await db.event_tables.bulkGet([...new Set(rows.map((row) => row.table_id))]);
+    const deletedTables = new Set(
+      tables.filter((table) => table?.is_deleted).map((table) => table!.id)
+    );
+
+    const toAdd: LocalTableArrival[] = rows
+      .filter((row) => !known.has(row.id) && !deletedTables.has(row.table_id))
+      .map((row) => ({ ...row, _pending_sync: false }));
+    if (toAdd.length > 0) {
+      await db.table_arrivals.bulkPut(toAdd);
+      added = toAdd.length;
+    }
+  });
+  return added;
+}
+
+export async function pullFromServer(eventId: string): Promise<PulledCounts> {
+  if (!isSupabaseConfigured()) return EMPTY_PULLED;
 
   const guests = await pullTable<Guest>("guests", eventId, "updated_at", applyRemoteGuests);
   const checkins = await pullTable<Checkin>("checkins", eventId, "created_at", applyRemoteCheckins);
+  // Tables come last: if migration 007 is not applied yet, guests still sync and
+  // the error ("Server table missing") is reported by the engine.
+  const event_tables = await pullTable<EventTable>(
+    "event_tables",
+    eventId,
+    "updated_at",
+    applyRemoteTables
+  );
+  const table_arrivals = await pullTable<TableArrival>(
+    "table_arrivals",
+    eventId,
+    "created_at",
+    applyRemoteTableArrivals
+  );
 
   // Legacy watermark is superseded by the per-table meta keys.
   try {
@@ -165,7 +238,7 @@ export async function pullFromServer(eventId: string): Promise<SyncResult["pulle
     // ignore
   }
 
-  return { guests, checkins };
+  return { guests, checkins, event_tables, table_arrivals };
 }
 
 export async function pushToServer(eventId: string): Promise<PushResult> {
@@ -258,29 +331,47 @@ export async function retryStuck(eventId: string): Promise<SyncResult> {
  * next pull can merge the server's version again.
  */
 export async function discardStuck(eventId: string): Promise<number> {
-  return db.transaction("rw", db.outbox, db.guests, db.checkins, async () => {
-    const stuck = await getStuckEntries(eventId);
-    for (const entry of stuck) {
-      if (entry.table === "guests") {
-        await db.guests.update(entry.record_id, { _pending_sync: false });
-      } else {
-        await db.checkins.update(entry.record_id, { _pending_sync: false });
+  return db.transaction(
+    "rw",
+    db.outbox,
+    db.guests,
+    db.checkins,
+    db.event_tables,
+    db.table_arrivals,
+    async () => {
+      const stuck = await getStuckEntries(eventId);
+      for (const entry of stuck) {
+        switch (entry.table) {
+          case "guests":
+            await db.guests.update(entry.record_id, { _pending_sync: false });
+            break;
+          case "checkins":
+            await db.checkins.update(entry.record_id, { _pending_sync: false });
+            break;
+          case "event_tables":
+            await db.event_tables.update(entry.record_id, { _pending_sync: false });
+            break;
+          case "table_arrivals":
+            await db.table_arrivals.update(entry.record_id, { _pending_sync: false });
+            break;
+        }
+        await db.outbox.delete(entry.id!);
       }
-      await db.outbox.delete(entry.id!);
+      return stuck.length;
     }
-    return stuck.length;
-  });
+  );
 }
 
 /** Removes every local record and sync marker for an event (used after a server wipe). */
 export async function clearLocalEventData(eventId: string): Promise<void> {
-  await db.transaction("rw", db.guests, db.checkins, db.outbox, db.meta, async () => {
-    await db.guests.where("event_id").equals(eventId).delete();
-    await db.checkins.where("event_id").equals(eventId).delete();
+  const stores = [db.guests, db.checkins, db.event_tables, db.table_arrivals, db.outbox, db.meta];
+  await db.transaction("rw", stores, async () => {
+    for (const table of SYNC_TABLES) {
+      await db[table].where("event_id").equals(eventId).delete();
+      await deleteMeta(tableWatermarkKey(eventId, table));
+    }
     await db.outbox.where("event_id").equals(eventId).delete();
     await deleteMeta(lastSyncKey(eventId));
-    await deleteMeta(tableWatermarkKey(eventId, "guests"));
-    await deleteMeta(tableWatermarkKey(eventId, "checkins"));
   });
   try {
     localStorage.removeItem(`last-sync-${eventId}`);

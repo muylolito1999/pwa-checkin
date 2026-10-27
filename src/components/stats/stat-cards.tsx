@@ -2,13 +2,19 @@
 
 import { Users, UserCheck, UserX, LogOut } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { GuestStats } from "@/types";
+import type { GuestStats, TableTotals } from "@/types";
 
 interface StatCardsProps {
   stats: GuestStats;
+  /** Table share of the totals; shown as a caption when there are tables. */
+  tableTotals?: TableTotals;
 }
 
-export function StatCards({ stats }: StatCardsProps) {
+export function StatCards({ stats, tableTotals }: StatCardsProps) {
+  const hasTables = Boolean(tableTotals && tableTotals.tables > 0);
+  const tableCaption = (count: number) =>
+    hasTables ? `incl. ${count} table ${count === 1 ? "seat" : "seats"}` : undefined;
+
   const cards = [
     {
       title: "Total Guests",
@@ -16,6 +22,7 @@ export function StatCards({ stats }: StatCardsProps) {
       icon: Users,
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
+      caption: tableCaption(tableTotals?.seats ?? 0),
     },
     {
       title: "Checked In",
@@ -23,7 +30,9 @@ export function StatCards({ stats }: StatCardsProps) {
       icon: UserCheck,
       color: "text-green-500",
       bgColor: "bg-green-500/10",
-      percentage: stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0,
+      caption:
+        `${stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0}% of total` +
+        (hasTables ? ` · ${tableTotals?.arrived ?? 0} at tables` : ""),
     },
     {
       title: "Not Arrived",
@@ -31,6 +40,7 @@ export function StatCards({ stats }: StatCardsProps) {
       icon: UserX,
       color: "text-orange-500",
       bgColor: "bg-orange-500/10",
+      caption: tableCaption(tableTotals?.remaining ?? 0),
     },
     {
       title: "Left",
@@ -38,6 +48,7 @@ export function StatCards({ stats }: StatCardsProps) {
       icon: LogOut,
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
+      caption: undefined,
     },
   ];
 
@@ -57,10 +68,8 @@ export function StatCards({ stats }: StatCardsProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{card.value}</div>
-              {card.percentage !== undefined && (
-                <p className="text-xs text-muted-foreground">
-                  {card.percentage}% of total
-                </p>
+              {card.caption && (
+                <p className="text-xs text-muted-foreground">{card.caption}</p>
               )}
             </CardContent>
           </Card>

@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Upload, ChartColumn, Settings, LogOut, Wifi, WifiOff } from "lucide-react";
+import {
+  Armchair,
+  ChartColumn,
+  LogOut,
+  Settings,
+  Upload,
+  Users,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/hooks/use-session";
 import { useIsOnline } from "@/hooks/use-is-online";
@@ -12,7 +21,9 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/guests", label: "Guests", icon: Users },
-  { href: "/import", label: "Import", icon: Upload },
+  { href: "/tables", label: "Tables", icon: Armchair },
+  // Importing a CSV is a desktop task; hiding it keeps the bar usable on narrow phones.
+  { href: "/import", label: "Import", icon: Upload, desktopOnly: true },
   { href: "/stats", label: "Stats", icon: ChartColumn },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -29,15 +40,18 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-14 items-center justify-between px-4">
-        <div className="flex items-center gap-4">
-          <Link href="/guests" className="flex items-center gap-2">
-            <span className="font-bold text-lg">🎉 {session?.eventName ?? APP_NAME}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {/* The name truncates so a long event name never pushes the bar past the screen edge. */}
+          <Link href="/guests" className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-bold text-base sm:text-lg">
+              🎉 {session?.eventName ?? APP_NAME}
+            </span>
           </Link>
 
           {/* Connectivity + sync indicator */}
           <div
             className={cn(
-              "flex items-center gap-1 text-xs px-2 py-1 rounded-full",
+              "flex shrink-0 items-center gap-1 text-xs px-2 py-1 rounded-full",
               !isOnline
                 ? "bg-yellow-500/10 text-yellow-500"
                 : hasStuck
@@ -48,17 +62,19 @@ export function Header() {
             aria-live="polite"
           >
             {isOnline ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {isOnline ? "Online" : "Offline"}
+            {/* The colour already says it; the word only fits on wider screens. */}
+            <span className="hidden sm:inline">{isOnline ? "Online" : "Offline"}</span>
             {showPending && (
-              <span className="ml-1">
-                · {sync.pendingChanges} pending{hasStuck ? ` (${sync.stuckChanges} stuck)` : ""}
+              <span className="sm:ml-1">
+                <span className="hidden sm:inline">· </span>
+                {sync.pendingChanges} pending{hasStuck ? ` (${sync.stuckChanges} stuck)` : ""}
               </span>
             )}
           </div>
         </div>
 
         {/* Navigation - horizontal on larger screens, compact on mobile */}
-        <nav className="flex items-center gap-1" aria-label="Main">
+        <nav className="flex shrink-0 items-center gap-1" aria-label="Main">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname.startsWith(item.href);
@@ -68,7 +84,7 @@ export function Header() {
                 asChild
                 variant={isActive ? "secondary" : "ghost"}
                 size="sm"
-                className="gap-2"
+                className={cn("gap-2 px-2 sm:px-3", item.desktopOnly && "hidden sm:inline-flex")}
               >
                 <Link
                   href={item.href}
@@ -86,7 +102,7 @@ export function Header() {
             variant="ghost"
             size="sm"
             onClick={logout}
-            className="ml-2 text-muted-foreground"
+            className="ml-1 px-2 text-muted-foreground sm:ml-2 sm:px-3"
             aria-label="Log out"
           >
             <LogOut className="h-4 w-4" />

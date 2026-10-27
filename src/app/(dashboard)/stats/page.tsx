@@ -41,7 +41,7 @@ export default function StatsPage() {
         </p>
       </div>
 
-      <StatCards stats={stats.guestStats} />
+      <StatCards stats={stats.guestStats} tableTotals={stats.tableTotals} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">

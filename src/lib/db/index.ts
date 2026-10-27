@@ -1,12 +1,23 @@
 import Dexie, { type EntityTable } from "dexie";
 import { v5 as uuidv5 } from "uuid";
-import type { LocalGuest, LocalCheckin, OutboxEntry, Event, SyncMeta } from "@/types";
+import type {
+  Event,
+  LocalCheckin,
+  LocalEventTable,
+  LocalGuest,
+  LocalTableArrival,
+  OutboxEntry,
+  SyncMeta,
+} from "@/types";
 
 // Database singleton
 class CheckinDatabase extends Dexie {
   events!: EntityTable<Event, "id">;
   guests!: EntityTable<LocalGuest, "id">;
   checkins!: EntityTable<LocalCheckin, "id">;
+  // Not `tables`: Dexie already exposes `db.tables` (the list of all stores).
+  event_tables!: EntityTable<LocalEventTable, "id">;
+  table_arrivals!: EntityTable<LocalTableArrival, "id">;
   outbox!: EntityTable<OutboxEntry, "id">;
   meta!: EntityTable<SyncMeta, "key">;
 
@@ -43,6 +54,13 @@ class CheckinDatabase extends Dexie {
             }
           })
       );
+
+    // v3: tables (group reservations) and their append-only arrivals log.
+    // Stores not listed here are carried over unchanged from v2.
+    this.version(3).stores({
+      event_tables: "id, event_id",
+      table_arrivals: "id, event_id, table_id, [event_id+table_id], arrived_at",
+    });
   }
 }
 

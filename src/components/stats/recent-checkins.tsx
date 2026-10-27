@@ -1,12 +1,21 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Armchair, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { RecentCheckin } from "@/types";
 
 interface RecentCheckinsProps {
   checkins: RecentCheckin[];
+}
+
+function describe(checkin: RecentCheckin): string {
+  if (checkin.source === "table") {
+    return checkin.type === "IN"
+      ? `+${checkin.count ?? 1} arrived at table`
+      : `Correction (−${checkin.count ?? 1}) at table`;
+  }
+  return checkin.type === "IN" ? "Checked in" : "Checked out";
 }
 
 function formatTime(isoString: string): string {
@@ -52,7 +61,9 @@ export function RecentCheckins({ checkins }: RecentCheckinsProps) {
                     : "bg-red-500/10 text-red-500"
                 )}
               >
-                {checkin.type === "IN" ? (
+                {checkin.source === "table" ? (
+                  <Armchair className="h-4 w-4" />
+                ) : checkin.type === "IN" ? (
                   <ArrowDownLeft className="h-4 w-4" />
                 ) : (
                   <ArrowUpRight className="h-4 w-4" />
@@ -60,9 +71,7 @@ export function RecentCheckins({ checkins }: RecentCheckinsProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{checkin.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {checkin.type === "IN" ? "Checked in" : "Checked out"}
-                </p>
+                <p className="text-xs text-muted-foreground">{describe(checkin)}</p>
               </div>
               <div className="text-xs text-muted-foreground">
                 {formatTime(checkin.time)}
