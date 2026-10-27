@@ -6,7 +6,8 @@
 
 UPDATE events
 SET name = 'PROM HALLOWEEN', date = '2026-10-31'
-WHERE name = 'NYE Party 2026';
+WHERE name = 'NYE Party 2026'
+RETURNING id, name, date;  -- the "id" shown here is the Event ID staff type at login
 
 -- Optional: new access code for the event
 -- UPDATE events
