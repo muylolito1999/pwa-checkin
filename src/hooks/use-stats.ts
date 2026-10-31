@@ -10,6 +10,7 @@ import type {
   TableTotals,
   TimeSlotStats,
 } from "@/types";
+import { formatGuestName } from "@/lib/csv/parse";
 
 interface StatsOptions {
   eventId: string;
@@ -115,7 +116,7 @@ export function useStats({ eventId, bucketMinutes = 30 }: StatsOptions) {
       null
     );
 
-    const guestNames = new Map(guests.map((g) => [g.id, `${g.first_name} ${g.last_name}`]));
+    const guestNames = new Map(guests.map((g) => [g.id, formatGuestName(g.first_name, g.last_name)]));
     const recentGuestCheckins: RecentCheckin[] = checkins.map((c) => ({
       id: c.id,
       name: guestNames.get(c.guest_id) ?? "Unknown",

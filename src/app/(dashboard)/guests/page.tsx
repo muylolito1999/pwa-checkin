@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
+import { Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useGuests, useGuestGroups } from "@/hooks/use-guests";
 import { useSession } from "@/hooks/use-session";
 import { GuestTable } from "@/components/guests/guest-table";
@@ -47,14 +50,22 @@ export default function GuestsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Guest List</h1>
           <p className="text-muted-foreground">
             Manage check-ins for {session?.eventName}
           </p>
         </div>
-        <AddGuestDialog eventId={eventId} />
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/import">
+              <Upload className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Import</span>
+            </Link>
+          </Button>
+          <AddGuestDialog eventId={eventId} />
+        </div>
       </div>
 
       <GuestFilters

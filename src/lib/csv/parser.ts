@@ -1,86 +1,24 @@
-import Papa from "papaparse";
 import { csvRowSchema, type CsvRowOutput } from "@/schemas";
 import { db, generateGuestId, generateStableKey } from "@/lib/db";
 import { addToOutbox } from "@/lib/sync/outbox";
+import { cleanText, decodeTextFile } from "@/lib/csv/clean";
+import { parseGuestText, titleCase, type ParsedGuestList, type RawCsvRow } from "@/lib/csv/parse";
 import type { CsvValidationError, CsvImportResult, LocalGuest } from "@/types";
-
-export interface RawCsvRow {
-  [key: string]: string;
-}
 
 /** Rows per Dexie transaction during import. */
 const IMPORT_CHUNK_SIZE = 200;
 
-// Normalize header names to match our expected format
-export function normalizeHeader(header: string): string {
-  const normalized = header.toLowerCase().trim().replace(/[\s_-]+/g, "_");
-
-  // Common aliases
-  const aliases: Record<string, string> = {
-    nome: "first_name",
-    cognome: "last_name",
-    name: "first_name",
-    surname: "last_name",
-    lastname: "last_name",
-    firstname: "first_name",
-    first: "first_name",
-    last: "last_name",
-    telefono: "phone",
-    tel: "phone",
-    telephone: "phone",
-    mobile: "phone",
-    gruppo: "group",
-    categoria: "group",
-    category: "group",
-    note: "notes",
-    ticket: "ticket_code",
-    code: "ticket_code",
-    codice: "ticket_code",
-  };
-
-  return aliases[normalized] || normalized;
+/**
+ * Decodes an uploaded file (UTF-8, falling back to Windows-1252), cleans it and
+ * parses it as either a CSV with a header row or a plain list of names.
+ */
+export async function parseGuestFile(file: File): Promise<ParsedGuestList> {
+  return parseGuestText(cleanText(decodeTextFile(await file.arrayBuffer())));
 }
 
-// Normalize row data to expected structure
-function normalizeRow(row: RawCsvRow): RawCsvRow {
-  const normalized: RawCsvRow = {};
-  for (const [key, value] of Object.entries(row)) {
-    normalized[normalizeHeader(key)] = value;
-  }
-  return normalized;
-}
-
-/** Title-cases a name, including accented letters and parts after apostrophes/hyphens. */
-export function titleCase(str: string): string {
-  return str
-    .trim()
-    .toLowerCase()
-    .replace(/(^|[\s'’-])(\p{L})/gu, (_, prefix: string, letter: string) => prefix + letter.toLocaleUpperCase());
-}
-
-export async function parseCsvFile(file: File): Promise<{
-  data: RawCsvRow[];
-  headers: string[];
-  errors: string[];
-}> {
-  return new Promise((resolve) => {
-    Papa.parse<RawCsvRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header) => header.trim(),
-      complete: (results) => {
-        const errors = results.errors.map((e) => `Row ${e.row}: ${e.message}`);
-        resolve({
-          data: results.data,
-          headers: results.meta.fields || [],
-          errors,
-        });
-      },
-      error: (error) => {
-        resolve({ data: [], headers: [], errors: [error.message] });
-      },
-    });
-  });
+/** Same pipeline for text pasted into the import page. */
+export function parseGuestInput(text: string): ParsedGuestList {
+  return parseGuestText(cleanText(text));
 }
 
 function validateRows(rows: RawCsvRow[]): {
@@ -91,7 +29,7 @@ function validateRows(rows: RawCsvRow[]): {
   const errors: CsvValidationError[] = [];
 
   rows.forEach((row, index) => {
-    const result = csvRowSchema.safeParse(normalizeRow(row));
+    const result = csvRowSchema.safeParse(row);
     if (result.success) {
       valid.push({ index, data: result.data });
     } else {
@@ -118,16 +56,30 @@ export async function importCsvToDatabase(
   onProgress?: (current: number, total: number) => void
 ): Promise<CsvImportResult> {
   const { valid, errors } = validateRows(rows);
+
+  // The same name twice in one file is one guest: the first occurrence wins.
+  const seen = new Set<string>();
+  const unique: Array<{ data: CsvRowOutput; stableKey: string }> = [];
+  let duplicates = 0;
+  for (const { data } of valid) {
+    const stableKey = generateStableKey(data.last_name, data.first_name);
+    if (seen.has(stableKey)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(stableKey);
+    unique.push({ data, stableKey });
+  }
+
   let imported = 0;
   let updated = 0;
 
-  for (let start = 0; start < valid.length; start += IMPORT_CHUNK_SIZE) {
-    const chunk = valid.slice(start, start + IMPORT_CHUNK_SIZE);
+  for (let start = 0; start < unique.length; start += IMPORT_CHUNK_SIZE) {
+    const chunk = unique.slice(start, start + IMPORT_CHUNK_SIZE);
 
     // One transaction per chunk: a row and its outbox entry always land together.
     await db.transaction("rw", db.guests, db.outbox, async () => {
-      for (const { data } of chunk) {
-        const stableKey = generateStableKey(data.last_name, data.first_name);
+      for (const { data, stableKey } of chunk) {
         const now = new Date().toISOString();
         const existing = await db.guests.where({ event_id: eventId, stable_key: stableKey }).first();
 
@@ -170,13 +122,14 @@ export async function importCsvToDatabase(
       }
     });
 
-    onProgress?.(Math.min(start + IMPORT_CHUNK_SIZE, valid.length), valid.length);
+    onProgress?.(Math.min(start + IMPORT_CHUNK_SIZE, unique.length), unique.length);
   }
 
   return {
     success: errors.length === 0,
     imported,
     updated,
+    duplicates,
     errors,
   };
 }

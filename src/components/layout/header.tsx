@@ -22,8 +22,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/guests", label: "Guests", icon: Users },
   { href: "/tables", label: "Tables", icon: Armchair },
-  // Importing a CSV is a desktop task; hiding it keeps the bar usable on narrow phones.
-  { href: "/import", label: "Import", icon: Upload, desktopOnly: true },
+  { href: "/import", label: "Import", icon: Upload },
   { href: "/stats", label: "Stats", icon: ChartColumn },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -84,7 +83,7 @@ export function Header() {
                 asChild
                 variant={isActive ? "secondary" : "ghost"}
                 size="sm"
-                className={cn("gap-2 px-2 sm:px-3", item.desktopOnly && "hidden sm:inline-flex")}
+                className="gap-2 px-2 sm:px-3"
               >
                 <Link
                   href={item.href}

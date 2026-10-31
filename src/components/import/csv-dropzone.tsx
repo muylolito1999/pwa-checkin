@@ -1,117 +1,90 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Upload, FileText, X } from "lucide-react";
+import { useCallback, useId, useState } from "react";
+import { Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface CsvDropzoneProps {
   onFileSelect: (file: File) => void;
-  selectedFile: File | null;
-  onClear: () => void;
 }
 
-export function CsvDropzone({
-  onFileSelect,
-  selectedFile,
-  onClear,
-}: CsvDropzoneProps) {
+const ACCEPTED_EXTENSIONS = new Set(["csv", "txt", "tsv"]);
+// MIME types vary by OS and browser; some systems send none at all.
+const ACCEPTED_TYPES = new Set([
+  "text/csv",
+  "text/plain",
+  "text/tab-separated-values",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "",
+]);
+
+export function isAcceptedFile(file: File): boolean {
+  const dot = file.name.lastIndexOf(".");
+  const extension = dot === -1 ? "" : file.name.slice(dot + 1).toLowerCase();
+  if (extension) return ACCEPTED_EXTENSIONS.has(extension);
+  return ACCEPTED_TYPES.has(file.type);
+}
+
+export function CsvDropzone({ onFileSelect }: CsvDropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const inputId = useId();
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setIsDragOver(false);
-
-      const file = e.dataTransfer.files[0];
-      
-      // Accept CSV files by extension OR MIME type (MIME types vary by OS/browser)
-      const isCSV = file && (
-        file.name.toLowerCase().endsWith('.csv') ||
-        file.type === 'text/csv' ||
-        file.type === 'application/vnd.ms-excel' ||
-        file.type === 'application/csv' ||
-        file.type === '' // Some systems don't set MIME type
-      );
-      
-      if (isCSV) {
-        onFileSelect(file);
+  const accept = useCallback(
+    (file: File | undefined) => {
+      if (!file) return;
+      if (!isAcceptedFile(file)) {
+        toast.error("Only .csv, .tsv or .txt files are supported");
+        return;
       }
+      onFileSelect(file);
     },
     [onFileSelect]
   );
-
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    setIsDragOver(false);
-  }, []);
-
-  const handleFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        onFileSelect(file);
-      }
-    },
-    [onFileSelect]
-  );
-
-  if (selectedFile) {
-    return (
-      <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/50">
-        <div className="flex items-center gap-3">
-          <FileText className="h-8 w-8 text-muted-foreground" />
-          <div>
-            <p className="font-medium">{selectedFile.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {(selectedFile.size / 1024).toFixed(1)} KB
-            </p>
-          </div>
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selected file">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-    );
-  }
 
   return (
-    <div
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
+    // The whole area is the label, so tapping anywhere opens the file picker.
+    <label
+      htmlFor={inputId}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        accept(e.dataTransfer.files[0]);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
       className={cn(
-        "flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed p-12 transition-colors",
+        "flex cursor-pointer flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed p-8 text-center transition-colors sm:p-12",
+        "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
         isDragOver
           ? "border-primary bg-primary/5"
           : "border-muted-foreground/25 hover:border-muted-foreground/50"
       )}
     >
-      <Upload
-        className={cn(
-          "h-12 w-12",
-          isDragOver ? "text-primary" : "text-muted-foreground"
-        )}
-      />
-      <div className="text-center">
-        <p className="text-lg font-medium">Drop your CSV file here</p>
-        <p className="text-sm text-muted-foreground">or click to browse</p>
+      <Upload className={cn("h-12 w-12", isDragOver ? "text-primary" : "text-muted-foreground")} />
+      <div>
+        <p className="text-lg font-medium">Drop a CSV or text file here</p>
+        <p className="text-sm text-muted-foreground">or tap to choose a file</p>
       </div>
-      <label>
-        <input
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={handleFileInput}
-        />
-        <Button variant="outline" asChild>
-          <span>Select File</span>
-        </Button>
-      </label>
-    </div>
+      <Button variant="outline" asChild>
+        <span>Choose file</span>
+      </Button>
+      <input
+        id={inputId}
+        type="file"
+        accept=".csv,.txt,.tsv,text/csv,text/plain,text/tab-separated-values"
+        className="sr-only"
+        onChange={(e) => {
+          accept(e.target.files?.[0]);
+          // Allow picking the same file again after a cancel.
+          e.target.value = "";
+        }}
+      />
+    </label>
   );
 }

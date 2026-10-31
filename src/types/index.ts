@@ -110,15 +110,6 @@ export interface SyncMeta {
 }
 
 // CSV Import types
-export interface CsvRow {
-  first_name: string;
-  last_name: string;
-  notes?: string;
-  phone?: string;
-  group?: string;
-  ticket_code?: string;
-}
-
 export interface CsvValidationError {
   row: number;
   field: string;
@@ -129,6 +120,8 @@ export interface CsvImportResult {
   success: boolean;
   imported: number;
   updated: number;
+  /** Rows skipped because the same name appeared earlier in the file. */
+  duplicates: number;
   errors: CsvValidationError[];
 }
 

@@ -38,6 +38,7 @@ import { deleteGuest } from "@/lib/db/mutations";
 import type { GuestWithStatus } from "@/hooks/use-guests";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatGuestName } from "@/lib/csv/parse";
 
 interface GuestTableProps {
   guests: GuestWithStatus[];
@@ -69,7 +70,7 @@ function DeleteGuestButton({
   eventId: string;
 }) {
   const [loading, setLoading] = useState(false);
-  const guestName = `${guest.first_name} ${guest.last_name}`;
+  const guestName = formatGuestName(guest.first_name, guest.last_name);
 
   const handleDelete = async () => {
     setLoading(true);
@@ -201,7 +202,7 @@ export function GuestTable({ guests, eventId }: GuestTableProps) {
             <CheckInButton
               guestId={row.original.id}
               eventId={eventId}
-              guestName={`${row.original.first_name} ${row.original.last_name}`}
+              guestName={formatGuestName(row.original.first_name, row.original.last_name)}
               isCheckedIn={row.original.isCheckedIn}
             />
             <DeleteGuestButton guest={row.original} eventId={eventId} />

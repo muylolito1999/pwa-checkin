@@ -2,8 +2,10 @@ import { z } from "zod";
 
 // CSV row schema for import
 export const csvRowSchema = z.object({
-  first_name: z.string().min(1, "First name is required").transform((s) => s.trim()),
-  last_name: z.string().min(1, "Last name is required").transform((s) => s.trim()),
+  // Trim before the length check so a whitespace-only name is rejected, not imported as "".
+  first_name: z.string().trim().min(1, "First name is required"),
+  // A single-word line ("Madonna") is a guest with no surname.
+  last_name: z.string().trim().default(""),
   notes: z.string().optional().transform((s) => s?.trim() || null),
   phone: z
     .string()

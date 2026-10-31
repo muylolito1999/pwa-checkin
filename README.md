@@ -4,7 +4,7 @@ Offline-first Progressive Web App for checking guests in at PROM HALLOWEEN (and 
 
 ## Features
 
-- **Guest management**: import guests from CSV, add or remove them by hand, search by name, phone or ticket code
+- **Guest management**: import guests from a CSV file or a pasted list of names (any encoding, with or without a header row), add or remove them by hand, search by name, phone or ticket code
 - **One-tap check-in / check-out** with large touch targets
 - **Tables**: group reservations ("Marco, 10 seats") with partial arrivals (+1, +N, corrections) and the remaining seats always in view; over-capacity is allowed and flagged
 - **Live statistics**: arrivals per time slot, cumulative timeline, peak window, recent activity
@@ -78,12 +78,17 @@ npm run build        # production build (Turbopack); bundles the service worker
 npm start
 npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
+npm test             # unit tests for the import parser (node:test, needs Node 24)
 ```
 
 ## Usage
 
 1. **Sign in** on each device with the Event ID and access code. The device signs in anonymously to Supabase and becomes a member of the event. Afterwards it can reload and keep working offline.
-2. **Import** guests from CSV (Import tab). Required columns: `first_name`, `last_name`. Optional: `group`, `phone`, `notes`, `ticket_code`. Common Italian/English header aliases are recognized (`nome`, `cognome`, `telefono`, …). Re-importing updates existing guests by name.
+2. **Import** guests from the Import tab, or the *Import* button on the Guests page. Upload a file or paste the names. Two shapes are accepted:
+   - **Plain list**: one guest per line, first name then surname (`Mario Rossi`). `Rossi, Mario` is read as surname first; a single word is a guest without a surname. If the list is written "Surname Name", use *Swap first/last name* in the preview.
+   - **CSV / spreadsheet export**: a header row with `first_name` and `last_name` (or `nome`/`cognome`, or one full-name column such as `nominativo`), plus optional `group`, `phone`, `notes`, `ticket_code`. Comma, semicolon or tab separated.
+
+   Files may be UTF-8 or Windows-1252 (Excel on Windows); non-breaking spaces, curly apostrophes and stray `�` characters are cleaned up. The preview shows how every name was split before anything is written. Re-importing updates existing guests by name; a name repeated in the same file is imported once.
 3. **Check in** from the Guests tab. Tap *Check in* / *Check out*; the row shows the time and the number of entries.
 4. **Tables** holds group reservations that are not on the guest list. Add a table with a name and the reserved seats, then record arrivals as people show up: *+1*, *−1* (correction) or *+N* for a group. Each card shows arrived / seats, the remaining seats, or how many came over capacity.
 5. **Stats** shows live counters, the arrivals histogram and the latest activity for the data on this device (synced every 30 s). Table seats count as expected guests and table arrivals as checked in.
@@ -155,7 +160,7 @@ src/
 │   ├── db/                  # Dexie schema (v3) + transactional mutations
 │   ├── sync/                # outbox (push) + engine (pull, lock, status)
 │   ├── supabase/            # client, anonymous sign-in, error helpers
-│   ├── csv/                 # CSV parsing and chunked import
+│   ├── csv/                 # Text cleanup (encoding, spaces, quotes), list/CSV parsing, chunked import + tests
 │   ├── tables.ts            # Arrival sums, table status and totals (shared by Tables and Stats)
 │   ├── session-store.ts     # localStorage session via useSyncExternalStore
 │   └── event-config.ts      # app name, version, sync interval
@@ -172,6 +177,7 @@ supabase/migrations/         # 001 … 007
 - **"Anonymous sign-ins are disabled"**: enable the provider in Supabase Auth settings.
 - **"This device is not a member of the event"**: the device's auth session was lost (storage cleared). Sign out and sign in again with the access code.
 - **Changes stuck in Settings**: read the error shown, fix the cause (usually connectivity or membership), then *Retry*. *Discard* drops the local change and accepts the server's version.
+- **Duplicate guests after re-importing**: guests imported by an older version with garbled characters (`D�Aniello`, a trailing `�`) or curly apostrophes have a different id than their cleaned name, so a new import adds them again instead of updating. Delete the garbled guests (or *Delete all server data* + *Clear local data*) and import once more.
 
 ## License
 
